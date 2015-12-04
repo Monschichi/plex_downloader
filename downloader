@@ -51,17 +51,21 @@ def video_episodes(video, target, plex):
 def download(part, target, plex):
     logger = logging.getLogger('download')
     logger.info('mkdir: %s' % os.path.dirname(os.path.abspath(target + part.file)))
+    path = os.path.dirname(os.path.abspath(target + part.file))
+    filename = os.path.basename(os.path.abspath(target + part.file))
     try:
-        os.makedirs(os.path.dirname(os.path.abspath(target + part.file)))
+        os.makedirs(path)
     except FileExistsError:
         pass
     except:
         logger.fatal('Unexpected error: %s' % sys.exc_info()[0])
         os._exit(os.EX_CANTCREAT)
     url = plex.url('/library/parts/' + str(part.id) + '/file.mkv')
-    logger.info('downloading %s to %s' % (url, target + part.file))
-    with http.request('GET', url, preload_content=False) as r, open(target + part.file, 'wb') as out_file:       
+    logger.info('downloading %s to %s' % (url, path + "/." + filename))
+    with http.request('GET', url, preload_content=False) as r, open(path + "/." + filename, 'wb') as out_file:       
         shutil.copyfileobj(r, out_file)
+    logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
+    os.rename(path + "/." + filename, path + "/" + filename)
 
 def main():
     authentication = netrc.netrc().authenticators('plex')
