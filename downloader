@@ -45,12 +45,15 @@ def video_episodes(video, target, plex):
             for part in episode.iter_parts():
                 logger.debug('Found: %s %s' % (part.id, part.file))
                 download(part, target, plex)
+            logger.info('marking %s as watched' % episode.title)
+            episode.markWatched()
     else:
         logger.info('Found: %s' % video.title)
         for part in video.iter_parts():
             logger.debug('Found: %s %s' % (part.id, part.file))
             download(part, target, plex)
-    video.markWatched()
+        logger.info('marking %s as watched' % video.title)
+        video.markWatched()
 
 def download(part, target, plex):
     logger = logging.getLogger('download')
