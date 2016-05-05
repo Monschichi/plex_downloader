@@ -33,13 +33,10 @@ def video_episodes(video, target, plex):
     if video.type == 'show':
         logger.debug('Found: %s' % video.title)
         for episode in video.episodes():
+            episode.reload()
             logger.debug('Found: %s episode %s %s' % (episode.season().title, episode.index, episode.title))
             logger.debug('viewcount: %s' % episode.viewCount)
             if episode.viewCount > 0:
-                logger.info('%s %s already seen' % (episode.season().title, episode.index))
-                continue
-            logger.debug('lastViewedAt: %s' % episode.lastViewedAt)
-            if episode.lastViewedAt is not None:
                 logger.info('%s %s already seen' % (episode.season().title, episode.index))
                 continue
             for part in episode.iter_parts():
