@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from plexapi.myplex import MyPlexUser
+from plexapi.myplex import MyPlexAccount
 import netrc
 import argparse
 import logging
@@ -73,7 +73,7 @@ def download(part, target, plex):
 
 def main():
     authentication = netrc.netrc().authenticators('plex')
-    user = MyPlexUser.signin(authentication[0], authentication[2])
+    user = MyPlexAccount.signin(authentication[0], authentication[2])
     
     parser = argparse.ArgumentParser()
     group1 = parser.add_mutually_exclusive_group()
@@ -104,7 +104,7 @@ def main():
     logger.setLevel(loglevel)
 
     logger.info('connecting to %s' % args.server)
-    plex = user.getResource(args.server).connect()
+    plex = user.resource(args.server).connect()
     if args.section:
         logger.info('selecting section %s' % args.section)
         try:
