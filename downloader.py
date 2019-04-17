@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
-from plexapi.myplex import MyPlexAccount
-import netrc
 import argparse
 import logging
+import netrc
 import os
-import urllib3
-import certifi
 import shutil
 
+import certifi
+import urllib3
+from plexapi.myplex import MyPlexAccount
+
 http = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
+
 
 def process_section(section, target, name, plex):
     logger = logging.getLogger('download')
@@ -22,6 +24,7 @@ def process_section(section, target, name, plex):
         os._exit(os.EX_DATAERR)
     logger.debug('Found: %s' % name)
     video_episodes(video, target, plex)
+
 
 def video_episodes(video, target, plex):
     logger = logging.getLogger('download')
@@ -47,6 +50,7 @@ def video_episodes(video, target, plex):
         logger.info('marking %s as watched' % video.title)
         video.markWatched()
 
+
 def download(part, target, plex):
     logger = logging.getLogger('download')
     logger.info('mkdir: %s' % os.path.dirname(os.path.abspath(target + part.file)))
@@ -66,6 +70,7 @@ def download(part, target, plex):
     logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
     os.rename(path + "/." + filename, path + "/" + filename)
 
+
 def main():
     logformat = '%(asctime)s %(filename)-18s %(levelname)-8s: %(message)s'
     logger = logging.getLogger('download')
@@ -80,25 +85,26 @@ def main():
 
         parser = argparse.ArgumentParser()
         group1 = parser.add_mutually_exclusive_group()
-        group1.add_argument("-d", "--debug", action = "store_true")
-        group1.add_argument("-v", "--verbose", action = "store_true")
-        group1.add_argument("-q", "--quiet", action = "store_true")
-        parser.add_argument("--server", help = "Plex server name to fetch files from", required = True, choices = [x.name for x in user.resources() if x.provides == 'server'])
-        parser.add_argument("--target", help = "destination folder", required = True)
-        parser.add_argument("--section", help = "section to fetch", required = True)
-        parser.add_argument("--name", help = "movie or serie to fetch", required = True)
+        group1.add_argument("-d", "--debug", action="store_true")
+        group1.add_argument("-v", "--verbose", action="store_true")
+        group1.add_argument("-q", "--quiet", action="store_true")
+        parser.add_argument("--server", help="Plex server name to fetch files from", required=True,
+                            choices=[x.name for x in user.resources() if x.provides == 'server'])
+        parser.add_argument("--target", help="destination folder", required=True)
+        parser.add_argument("--section", help="section to fetch", required=True)
+        parser.add_argument("--name", help="movie or serie to fetch", required=True)
         args = parser.parse_args()
 
         if args.name and not args.section:
             parser.error('--name specified without --section')
         if args.debug:
-            loglevel=logging.DEBUG
+            loglevel = logging.DEBUG
         elif args.verbose:
-            loglevel=logging.INFO
+            loglevel = logging.INFO
         elif args.quiet:
-            loglevel=logging.ERROR
+            loglevel = logging.ERROR
         else:
-            loglevel=logging.WARNING
+            loglevel = logging.WARNING
         logger.setLevel(loglevel)
 
         logger.info('connecting to %s' % args.server)
@@ -110,6 +116,7 @@ def main():
             logger.error('section %s not found' % args.section)
             os._exit(os.EX_DATAERR)
         process_section(section, args.target, args.name, plex)
+
 
 if __name__ == "__main__":
     main()
