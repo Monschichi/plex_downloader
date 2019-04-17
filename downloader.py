@@ -4,7 +4,7 @@ import argparse
 import logging
 import netrc
 import os
-import shutil
+import sys
 
 import certifi
 import urllib3
@@ -13,7 +13,7 @@ from plexapi.myplex import MyPlexAccount
 http = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
 
 
-def process_section(section, target, name, plex):
+def process_section(section, target, name):
     logger = logging.getLogger('download')
     logger.info('processing section %s' % section)
     logger.debug('searching for %s' % name)
@@ -23,10 +23,10 @@ def process_section(section, target, name, plex):
         logger.error('unable to find: %s' % name)
         os._exit(os.EX_DATAERR)
     logger.debug('Found: %s' % name)
-    video_episodes(video, target, plex)
+    video_episodes(video, target)
 
 
-def video_episodes(video, target, plex):
+def video_episodes(video, target):
     logger = logging.getLogger('download')
     if video.type == 'show':
         logger.debug('Found: %s' % video.title)
@@ -37,38 +37,39 @@ def video_episodes(video, target, plex):
             if episode.viewCount > 0:
                 logger.info('%s %s already seen' % (episode.season().title, episode.index))
                 continue
-            for part in episode.iterParts():
-                logger.debug('Found: %s %s' % (part.id, part.file))
-                download(part, target, plex)
+            download(video, target)
             logger.info('marking %s as watched' % episode.title)
             episode.markWatched()
     else:
         logger.info('Found: %s' % video.title)
-        for part in video.iterParts():
-            logger.debug('Found: %s %s' % (part.id, part.file))
-            download(part, target, plex)
+        download(video, target)
         logger.info('marking %s as watched' % video.title)
         video.markWatched()
 
 
-def download(part, target, plex):
+def download(video, target):
     logger = logging.getLogger('download')
-    logger.info('mkdir: %s' % os.path.dirname(os.path.abspath(target + part.file)))
-    path = os.path.dirname(os.path.abspath(target + part.file))
-    filename = os.path.basename(os.path.abspath(target + part.file))
-    try:
-        os.makedirs(path)
-    except FileExistsError:
-        pass
-    except:
-        logger.fatal('Unexpected error: %s' % sys.exc_info()[0])
-        os._exit(os.EX_CANTCREAT)
-    url = plex.url('/library/parts/' + str(part.id) + '/file.mkv')
-    logger.info('downloading %s to %s' % (url, path + "/." + filename))
-    with http.request('GET', url, preload_content=False) as r, open(path + "/." + filename, 'wb') as out_file:
-        shutil.copyfileobj(r, out_file)
-    logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
-    os.rename(path + "/." + filename, path + "/" + filename)
+    for part in video.iterParts():
+        logger.debug('Found: %s %s' % (part.id, part.file))
+        logger.info('mkdir: %s' % os.path.dirname(os.path.abspath(target + part.file)))
+        path = os.path.dirname(os.path.abspath(target + part.file))
+        filename = os.path.basename(os.path.abspath(target + part.file))
+        try:
+            os.makedirs(path)
+        except FileExistsError:
+            pass
+        except:
+            logger.fatal('Unexpected error: %s' % sys.exc_info()[0])
+            os._exit(os.EX_CANTCREAT)
+        url = video._server.url('%s?download=1&X-Plex-Token=%s' % (part.key, video._server._token))
+        logger.info('downloading %s to %s' % (url, path + "/." + filename))
+        with video._server._session.get(url, stream=True) as r, open(path + "/." + filename, 'wb') as out_file:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:  # filter out keep-alive new chunks
+                    out_file.write(chunk)
+        logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
+        os.rename(path + "/." + filename, path + "/" + filename)
 
 
 def main():
@@ -115,7 +116,7 @@ def main():
         except:
             logger.error('section %s not found' % args.section)
             os._exit(os.EX_DATAERR)
-        process_section(section, args.target, args.name, plex)
+        process_section(section, args.target, args.name)
 
 
 if __name__ == "__main__":
