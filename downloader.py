@@ -8,6 +8,7 @@ import sys
 
 import certifi
 import urllib3
+from plexapi.exceptions import NotFound
 from plexapi.myplex import MyPlexAccount
 
 http = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
@@ -24,6 +25,19 @@ def process_section(section, target, name):
         os._exit(os.EX_DATAERR)
     logger.debug('Found: %s' % name)
     video_episodes(video, target)
+
+
+def process_playlist(playlist, target):
+    logger = logging.getLogger('download')
+    logger.info('processing playlist %s' % playlist)
+    for video in playlist.items():
+        logger.debug('Video %s from playlist %s' % (video.title, playlist.title))
+        video.reload()
+        logger.debug('viewcount: %s' % video.viewCount)
+        if video.viewCount > 0:
+            logger.info('%s already seen' % video.title)
+            continue
+        video_episodes(video, target)
 
 
 def video_episodes(video, target):
@@ -92,11 +106,14 @@ def main():
         parser.add_argument("--server", help="Plex server name to fetch files from", required=True,
                             choices=[x.name for x in user.resources() if x.provides == 'server'])
         parser.add_argument("--target", help="destination folder", required=True)
-        parser.add_argument("--section", help="section to fetch", required=True)
-        parser.add_argument("--name", help="movie or serie to fetch", required=True)
+        parser.add_argument("--section", help="section to fetch")
+        parser.add_argument("--name", help="movie or series to fetch")
+        parser.add_argument("--playlist", help="playlist to fetch")
         args = parser.parse_args()
 
-        if args.name and not args.section:
+        if not (args.playlist or args.section) or (args.playlist and args.section):
+            parser.error('either --section or --playlist required')
+        elif args.name and not args.section:
             parser.error('--name specified without --section')
         if args.debug:
             loglevel = logging.DEBUG
@@ -110,13 +127,22 @@ def main():
 
         logger.info('connecting to %s' % args.server)
         plex = user.resource(args.server).connect()
-        logger.info('selecting section %s' % args.section)
-        try:
-            section = plex.library.section(args.section)
-        except:
-            logger.error('section %s not found' % args.section)
-            os._exit(os.EX_DATAERR)
-        process_section(section, args.target, args.name)
+        if args.section:
+            logger.info('selecting section %s' % args.section)
+            try:
+                section = plex.library.section(args.section)
+            except NotFound:
+                logger.error('section %s not found' % args.section)
+                os._exit(os.EX_DATAERR)
+            process_section(section, args.target, args.name)
+        elif args.playlist:
+            logger.info('selecting playlist %s' % args.playlist)
+            try:
+                playlist = plex.playlist(args.playlist)
+            except NotFound:
+                logger.error('playlist %s not found' % args.playlist)
+                os._exit(os.EX_DATAERR)
+            process_playlist(playlist, args.target)
 
 
 if __name__ == "__main__":
