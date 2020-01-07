@@ -27,7 +27,7 @@ def process_section(section, target, name):
     video_episodes(video, target)
 
 
-def process_playlist(playlist, target):
+def process_playlist(playlist, target, remove=False):
     logger = logging.getLogger('download')
     logger.info('processing playlist %s' % playlist)
     for video in playlist.items():
@@ -38,6 +38,9 @@ def process_playlist(playlist, target):
             logger.info('%s already seen' % video.title)
             continue
         video_episodes(video, target)
+        if remove:
+            logging.info('deleting %s from playlist' % video.title)
+            playlist.removeItem(video)
 
 
 def video_episodes(video, target):
@@ -108,7 +111,9 @@ def main():
         parser.add_argument("--target", help="destination folder", required=True)
         parser.add_argument("--section", help="section to fetch")
         parser.add_argument("--name", help="movie or series to fetch")
-        parser.add_argument("--playlist", help="playlist to fetch")
+        group2 = parser.add_argument_group()
+        group2.add_argument("--playlist", help="playlist to fetch")
+        group2.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
         args = parser.parse_args()
 
         if not (args.playlist or args.section) or (args.playlist and args.section):
@@ -134,7 +139,7 @@ def main():
             except NotFound:
                 logger.error('section %s not found' % args.section)
                 os._exit(os.EX_DATAERR)
-            process_section(section, args.target, args.name)
+            process_section(section=section, target=args.target, name=args.name)
         elif args.playlist:
             logger.info('selecting playlist %s' % args.playlist)
             try:
@@ -142,7 +147,7 @@ def main():
             except NotFound:
                 logger.error('playlist %s not found' % args.playlist)
                 os._exit(os.EX_DATAERR)
-            process_playlist(playlist, args.target)
+            process_playlist(playlist=playlist, target=args.target, remove=args.playlist_remove)
 
 
 if __name__ == "__main__":
