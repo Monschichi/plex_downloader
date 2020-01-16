@@ -3,7 +3,7 @@ chardet==3.0.4
 idna==2.8
 PlexAPI==3.3.0
 requests==2.22.0
-six==1.13.0
+six==1.14.0
 tqdm==4.41.1
 urllib3==1.25.7
 websocket-client==0.57.0
