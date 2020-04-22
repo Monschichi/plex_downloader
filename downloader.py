@@ -6,12 +6,8 @@ import netrc
 import os
 import sys
 
-import certifi
-import urllib3
 from plexapi.exceptions import NotFound
 from plexapi.myplex import MyPlexAccount
-
-http = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=certifi.where())
 
 
 def process_section(section, target, name):
