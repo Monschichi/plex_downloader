@@ -46,7 +46,7 @@ def process_playlist(playlist, target, remove=False):
 def video_episodes(video, target):
     logger = logging.getLogger('download')
     if video.type == 'show':
-        logger.debug('Found: %s' % video.title)
+        logger.debug('Found Show: %s' % video.title)
         for episode in video.episodes():
             episode.reload()
             logger.debug('Found: %s episode %s %s' % (episode.season().title, episode.index, episode.title))
@@ -54,7 +54,7 @@ def video_episodes(video, target):
             if episode.viewCount > 0:
                 logger.info('%s %s already seen' % (episode.season().title, episode.index))
                 continue
-            download(video, target)
+            download(episode, target)
             logger.info('marking %s as watched' % episode.title)
             episode.markWatched()
     else:
@@ -66,6 +66,7 @@ def video_episodes(video, target):
 
 def download(video, target):
     logger = logging.getLogger('download')
+    logger.debug('downloading %s' % video)
     for part in video.iterParts():
         logger.debug('Found: %s %s' % (part.id, part.file))
         logger.info('mkdir: %s' % os.path.dirname(os.path.abspath(target + part.file)))
