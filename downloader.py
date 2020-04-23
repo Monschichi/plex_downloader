@@ -32,7 +32,8 @@ def process_section(section, target, name, bwlimit, progress):
 def process_playlist(playlist, target, bwlimit, progress, remove=False):
     logger = logging.getLogger('download')
     logger.info('processing playlist %s' % playlist)
-    for video in playlist.items():
+    for video in tqdm(playlist.items(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
+                      disable=not progress):
         logger.debug('Video %s from playlist %s' % (video.title, playlist.title))
         video.reload()
         logger.debug('viewcount: %s' % video.viewCount)
@@ -49,7 +50,8 @@ def video_episodes(video, target, bwlimit, progress):
     logger = logging.getLogger('download')
     if video.type == 'show':
         logger.debug('Found Show: %s' % video.title)
-        for episode in video.episodes():
+        for episode in tqdm(video.episodes(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
+                            disable=not progress):
             episode.reload()
             logger.debug('Found: %s Episode %s %s' % (episode.season().title, episode.index, episode.title))
             logger.debug('view count: %s' % episode.viewCount)
