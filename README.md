@@ -1,6 +1,7 @@
 # Plex Downloader
 
 This tool will download specified unseen movies/series from a given [Plex](https://plex.tv/) server. Marks downloaded files as seen to avoid redownload.
+Now with resume, progressbar and Bandwidth limit.
 
 Username/Password is stored in ```.netrc``` e.g.:
 ```
@@ -13,3 +14,5 @@ Install needed python modules:
 ```
 pip3 install --user -r requirements.txt
 ```
+
+see `downloader.py --help` for usage.
