@@ -6,24 +6,30 @@ import netrc
 import os
 import sys
 
+import pycurl
 from plexapi.exceptions import NotFound
 from plexapi.myplex import MyPlexAccount
+from tqdm import tqdm
+
+curl = pycurl.Curl()
+progressbar = tqdm(unit='B', unit_scale=True, unit_divisor=1024)
+progressbar.clear()
 
 
-def process_section(section, target, name):
+def process_section(section, target, name, bwlimit, progress):
     logger = logging.getLogger('download')
     logger.info('processing section %s' % section)
     logger.debug('searching for %s' % name)
     try:
         video = section.get(name)
-    except:
+    except NotFound:
         logger.error('unable to find: %s' % name)
-        os._exit(os.EX_DATAERR)
+        sys.exit(os.EX_DATAERR)
     logger.debug('Found: %s' % name)
-    video_episodes(video, target)
+    video_episodes(video=video, target=target, bwlimit=bwlimit, progress=progress)
 
 
-def process_playlist(playlist, target, remove=False):
+def process_playlist(playlist, target, bwlimit, progress, remove=False):
     logger = logging.getLogger('download')
     logger.info('processing playlist %s' % playlist)
     for video in playlist.items():
@@ -33,34 +39,40 @@ def process_playlist(playlist, target, remove=False):
         if video.viewCount > 0:
             logger.info('%s already seen' % video.title)
             continue
-        video_episodes(video, target)
+        video_episodes(video=video, target=target, bwlimit=bwlimit, progress=progress)
         if remove:
             logging.info('deleting %s from playlist' % video.title)
             playlist.removeItem(video)
 
 
-def video_episodes(video, target):
+def video_episodes(video, target, bwlimit, progress):
     logger = logging.getLogger('download')
     if video.type == 'show':
         logger.debug('Found Show: %s' % video.title)
         for episode in video.episodes():
             episode.reload()
-            logger.debug('Found: %s episode %s %s' % (episode.season().title, episode.index, episode.title))
-            logger.debug('viewcount: %s' % episode.viewCount)
+            logger.debug('Found: %s Episode %s %s' % (episode.season().title, episode.index, episode.title))
+            logger.debug('view count: %s' % episode.viewCount)
             if episode.viewCount > 0:
-                logger.info('%s %s already seen' % (episode.season().title, episode.index))
+                logger.info('%s Episode %s already seen' % (episode.season().title, episode.index))
                 continue
-            download(episode, target)
+            download(video=episode, target=target, bwlimit=bwlimit, progress=progress)
             logger.info('marking %s as watched' % episode.title)
             episode.markWatched()
     else:
         logger.info('Found: %s' % video.title)
-        download(video, target)
+        download(video=video, target=target, bwlimit=bwlimit, progress=progress)
         logger.info('marking %s as watched' % video.title)
         video.markWatched()
 
 
-def download(video, target):
+def curl_progress(download_total, downloaded, upload_total, uploaded):
+    progressbar.total = download_total
+    progressbar.n = downloaded
+    progressbar.update()
+
+
+def download(video, target, bwlimit, progress):
     logger = logging.getLogger('download')
     logger.debug('downloading %s' % video)
     for part in video.iterParts():
@@ -72,16 +84,30 @@ def download(video, target):
             os.makedirs(path)
         except FileExistsError:
             pass
-        except:
-            logger.fatal('Unexpected error: %s' % sys.exc_info()[0])
-            os._exit(os.EX_CANTCREAT)
+        except Exception as e:
+            logger.fatal('Unexpected error: %s' % repr(e))
+            sys.exit(os.EX_CANTCREAT)
         url = video._server.url('%s?download=1&X-Plex-Token=%s' % (part.key, video._server._token))
         logger.info('downloading %s to %s' % (url, path + "/." + filename))
-        with video._server._session.get(url, stream=True) as r, open(path + "/." + filename, 'wb') as out_file:
-            r.raise_for_status()
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:  # filter out keep-alive new chunks
-                    out_file.write(chunk)
+        curl.setopt(curl.URL, url)
+        if bwlimit:
+            curl.setopt(curl.MAX_RECV_SPEED_LARGE, bwlimit)
+        if os.path.exists(path + "/." + filename):
+            file_id = open(path + "/." + filename, "ab")
+            curl.setopt(curl.RESUME_FROM, os.path.getsize(path + "/." + filename))
+        else:
+            file_id = open(path + "/." + filename, "wb")
+
+        curl.setopt(curl.WRITEDATA, file_id)
+        if progress:
+            progressbar.set_description(desc='Downloading %s' % video.title)
+            progressbar.reset()
+            curl.setopt(curl.NOPROGRESS, 0)
+            curl.setopt(curl.XFERINFOFUNCTION, curl_progress)
+        else:
+            curl.setopt(curl.NOPROGRESS, 1)
+        curl.perform()
+        progressbar.clear()
         logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
         os.rename(path + "/." + filename, path + "/" + filename)
 
@@ -108,6 +134,8 @@ def main():
         parser.add_argument("--target", help="destination folder", required=True)
         parser.add_argument("--section", help="section to fetch")
         parser.add_argument("--name", help="movie or series to fetch")
+        parser.add_argument("--bwlimit", help="limit bandwidth in bytes/s", type=int)
+        parser.add_argument("--progress", help="show download progress", action="store_true")
         group2 = parser.add_argument_group()
         group2.add_argument("--playlist", help="playlist to fetch")
         group2.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
@@ -135,16 +163,17 @@ def main():
                 section = plex.library.section(args.section)
             except NotFound:
                 logger.error('section %s not found' % args.section)
-                os._exit(os.EX_DATAERR)
-            process_section(section=section, target=args.target, name=args.name)
+                sys.exit(os.EX_DATAERR)
+            process_section(section=section, target=args.target, name=args.name, bwlimit=args.bwlimit, progress=args.progress)
         elif args.playlist:
             logger.info('selecting playlist %s' % args.playlist)
             try:
                 playlist = plex.playlist(args.playlist)
             except NotFound:
                 logger.error('playlist %s not found' % args.playlist)
-                os._exit(os.EX_DATAERR)
-            process_playlist(playlist=playlist, target=args.target, remove=args.playlist_remove)
+                sys.exit(os.EX_DATAERR)
+            process_playlist(playlist=playlist, target=args.target, remove=args.playlist_remove, bwlimit=args.bwlimit,
+                             progress=args.progress)
 
 
 if __name__ == "__main__":
