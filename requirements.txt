@@ -4,7 +4,7 @@ idna==2.9
 PlexAPI==3.6.0
 pycurl==7.43.0.5
 requests==2.23.0
-six==1.14.0
+six==1.15.0
 tqdm==4.46.0
 urllib3==1.25.9
 websocket-client==0.57.0
