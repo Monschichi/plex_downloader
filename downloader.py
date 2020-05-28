@@ -13,11 +13,13 @@ from tqdm import tqdm
 
 
 class PlexDownloader:
-    def __init__(self, target: str, bw_limit: int, show_progress: bool):
+    def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool):
         self.logger = logging.getLogger('download')
         self.target = target
         self.bw_limit = bw_limit
         self.show_progress = show_progress
+        self.assets = assets
+        self.force = force
         self.curl = pycurl.Curl()
         self.progressbar = tqdm(unit='B', unit_scale=True, unit_divisor=1024)
         self.progressbar.clear()
@@ -40,7 +42,7 @@ class PlexDownloader:
             self.logger.debug('Video %s from playlist %s' % (video.title, playlist.title))
             video.reload()
             self.logger.debug('viewcount: %s' % video.viewCount)
-            if video.viewCount > 0:
+            if video.viewCount > 0 and not self.force:
                 self.logger.info('%s already seen' % video.title)
                 continue
             self.video_episodes(video=video)
@@ -56,15 +58,15 @@ class PlexDownloader:
                 episode.reload()
                 self.logger.debug('Found: %s Episode %s %s' % (episode.season().title, episode.index, episode.title))
                 self.logger.debug('view count: %s' % episode.viewCount)
-                if episode.viewCount > 0:
+                if episode.viewCount > 0 and not self.force:
                     self.logger.info('%s Episode %s already seen' % (episode.season().title, episode.index))
                     continue
-                self.download(video=episode)
+                self.video_parts(video=episode)
                 self.logger.info('marking %s as watched' % episode.title)
                 episode.markWatched()
         else:
             self.logger.info('Found: %s' % video.title)
-            self.download(video=video)
+            self.video_parts(video=video)
             self.logger.info('marking %s as watched' % video.title)
             video.markWatched()
 
@@ -73,43 +75,68 @@ class PlexDownloader:
         self.progressbar.n = downloaded
         self.progressbar.update()
 
-    def download(self, video):
-        self.logger.debug('downloading %s' % video)
+    def video_parts(self, video):
+        self.logger.debug('finding parts for %s' % video)
         for part in video.iterParts():
             self.logger.debug('Found: %s %s' % (part.id, part.file))
             self.logger.info('mkdir: %s' % os.path.dirname(os.path.abspath(self.target + part.file)))
             path = os.path.dirname(os.path.abspath(self.target + part.file))
             filename = os.path.basename(os.path.abspath(self.target + part.file))
-            try:
-                os.makedirs(path)
-            except FileExistsError:
-                pass
-            except Exception as e:
-                self.logger.fatal('Unexpected error: %s' % repr(e))
-                sys.exit(os.EX_CANTCREAT)
             url = video._server.url('%s?download=1&X-Plex-Token=%s' % (part.key, video._server._token))
             self.logger.info('downloading %s to %s' % (url, path + "/." + filename))
-            self.curl.setopt(self.curl.URL, url)
-            if self.bw_limit:
-                self.curl.setopt(self.curl.MAX_RECV_SPEED_LARGE, self.bw_limit)
-            if os.path.exists(path + "/." + filename):
-                file_id = open(path + "/." + filename, "ab")
-                self.curl.setopt(self.curl.RESUME_FROM, os.path.getsize(path + "/." + filename))
-            else:
-                file_id = open(path + "/." + filename, "wb")
+            self.download(url=url, path=path, filename=filename, title=video.title)
+            if self.assets:
+                self.download_subtitles(video=part, path=path, filename=filename)
+                self.download_pics(video=video, path=path, filename=filename)
 
-            self.curl.setopt(self.curl.WRITEDATA, file_id)
-            if self.show_progress:
-                self.progressbar.set_description(desc='Downloading %s' % video.title)
-                self.progressbar.reset()
-                self.curl.setopt(self.curl.NOPROGRESS, 0)
-                self.curl.setopt(self.curl.XFERINFOFUNCTION, self.curl_progress)
-            else:
-                self.curl.setopt(self.curl.NOPROGRESS, 1)
-            self.curl.perform()
-            self.progressbar.clear()
-            self.logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
-            os.rename(path + "/." + filename, path + "/" + filename)
+    def download_subtitles(self, video, path, filename):
+        self.logger.debug('downloading subtitles for %s' % video)
+        for sub in video.subtitleStreams():
+            self.logger.debug('Found subtitle %s' % sub)
+            if sub.key is None:
+                self.logger.debug('Subtitle is embedded, skipping')
+                continue
+            filename = '%s.%s.%s' % ('.'.join(filename.split('.')[0:-1]), sub.languageCode, sub.codec)
+            url = video._server.url('%s?download=1&X-Plex-Token=%s' % (sub.key, video._server._token))
+            self.download(url=url, path=path, filename=filename, title='%s %s' % (sub.languageCode, sub.codec))
+
+    def download_pics(self, video, path, filename):
+        self.logger.debug('downloading pics for %s' % video)
+        artfilename = '%s-%s.%s' % ('.'.join(filename.split('.')[0:-1]), 'fanart', 'jpg')
+        self.download(url=video.artUrl, path=path, filename=artfilename, title='thumbnail')
+        thumbfilename = '%s.%s' % ('.'.join(filename.split('.')[0:-1]), 'jpg')
+        self.download(url=video.thumbUrl, path=path, filename=thumbfilename, title='art')
+
+    def download(self, url, path, filename, title):
+        self.logger.debug('downloading %s %s %s %s' % (url, path, filename, title))
+        try:
+            os.makedirs(path)
+        except FileExistsError:
+            pass
+        except Exception as e:
+            self.logger.fatal('Unexpected error: %s' % repr(e))
+            sys.exit(os.EX_CANTCREAT)
+        self.curl.setopt(self.curl.URL, url)
+        if self.bw_limit:
+            self.curl.setopt(self.curl.MAX_RECV_SPEED_LARGE, self.bw_limit)
+        if os.path.exists(path + "/." + filename):
+            file_id = open(path + "/." + filename, "ab")
+            self.curl.setopt(self.curl.RESUME_FROM, os.path.getsize(path + "/." + filename))
+        else:
+            file_id = open(path + "/." + filename, "wb")
+
+        self.curl.setopt(self.curl.WRITEDATA, file_id)
+        if self.show_progress:
+            self.progressbar.set_description(desc='Downloading %s' % title)
+            self.progressbar.reset()
+            self.curl.setopt(self.curl.NOPROGRESS, 0)
+            self.curl.setopt(self.curl.XFERINFOFUNCTION, self.curl_progress)
+        else:
+            self.curl.setopt(self.curl.NOPROGRESS, 1)
+        self.curl.perform()
+        self.progressbar.clear()
+        self.logger.info('renaming %s to %s' % (path + "/." + filename, path + "/" + filename))
+        os.rename(path + "/." + filename, path + "/" + filename)
 
 
 if __name__ == "__main__":
@@ -136,6 +163,8 @@ if __name__ == "__main__":
     parser.add_argument("--name", help="movie or series to fetch")
     parser.add_argument("--bwlimit", help="limit bandwidth in bytes/s", type=int)
     parser.add_argument("--progress", help="show download progress", action="store_true")
+    parser.add_argument("--force", help="force download, even if already seen", action="store_true")
+    parser.add_argument("--assets", help="also download other assets (subtitles, cover and fanart)", action="store_true")
     group2 = parser.add_argument_group()
     group2.add_argument("--playlist", help="playlist to fetch")
     group2.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
@@ -157,7 +186,7 @@ if __name__ == "__main__":
 
     logger.info('connecting to %s' % args.server)
     plex = user.resource(args.server).connect()
-    pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress)
+    pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force)
     if args.section:
         logger.info('selecting section %s' % args.section)
         try:
