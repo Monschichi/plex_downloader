@@ -8,7 +8,10 @@ import sys
 
 import pycurl
 from plexapi.exceptions import NotFound
+from plexapi.library import ShowSection
 from plexapi.myplex import MyPlexAccount
+from plexapi.playlist import Playlist
+from plexapi.video import Video
 from tqdm import tqdm
 
 
@@ -24,7 +27,7 @@ class PlexDownloader:
         self.progressbar = tqdm(unit='B', unit_scale=True, unit_divisor=1024)
         self.progressbar.clear()
 
-    def process_section(self, section, name: str):
+    def process_section(self, section: ShowSection, name: str):
         self.logger.info(f'processing section {section}')
         self.logger.debug(f'searching for {name}')
         try:
@@ -35,7 +38,7 @@ class PlexDownloader:
         self.logger.debug(f'Found: {name}')
         self.video_episodes(video=video)
 
-    def process_playlist(self, playlist, remove=False):
+    def process_playlist(self, playlist: Playlist, remove=False):
         self.logger.info(f'processing playlist {playlist}')
         for video in tqdm(playlist.items(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
                           disable=not self.show_progress):
@@ -50,7 +53,7 @@ class PlexDownloader:
                 logging.info(f'deleting {video.title} from playlist')
                 playlist.removeItem(video)
 
-    def video_episodes(self, video):
+    def video_episodes(self, video: Video):
         if video.type == 'show':
             self.logger.debug(f'Found Show: {video.title}')
             for episode in tqdm(video.episodes(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
@@ -70,12 +73,12 @@ class PlexDownloader:
             self.logger.info(f'marking {video.title} as watched')
             video.markWatched()
 
-    def curl_progress(self, download_total, downloaded, upload_total, uploaded):
+    def curl_progress(self, download_total: int, downloaded: int, upload_total: int, uploaded: int):
         self.progressbar.total = download_total
         self.progressbar.n = downloaded
         self.progressbar.update()
 
-    def video_parts(self, video):
+    def video_parts(self, video: Video):
         self.logger.debug(f'finding parts for {video}')
         for part in video.iterParts():
             self.logger.debug(f'Found: {part.id} {part.file}')
@@ -89,7 +92,7 @@ class PlexDownloader:
                 self.download_subtitles(video=part, path=path, filename=filename)
                 self.download_pics(video=video, path=path, filename=filename)
 
-    def download_subtitles(self, video, path, filename):
+    def download_subtitles(self, video: Video, path: str, filename: str):
         self.logger.debug(f'downloading subtitles for {video}')
         for sub in video.subtitleStreams():
             self.logger.debug(f'Found subtitle {sub}')
@@ -100,7 +103,7 @@ class PlexDownloader:
             url = video._server.url(f'{sub.key}?download=1&X-Plex-Token={video._server._token}')
             self.download(url=url, path=path, filename=filename, title=f'{sub.languageCode} {sub.codec}', resume=False)
 
-    def download_pics(self, video, path, filename):
+    def download_pics(self, video: Video, path: str, filename: str):
         self.logger.debug(f'downloading pics for {video}')
         artfilename = f'{".".join(filename.split(".")[0:-1])}-{"fanart"}.{"jpg"}'
         self.download(url=video.artUrl, path=path, filename=artfilename, title='thumbnail', resume=False)
