@@ -9,6 +9,7 @@ import sys
 import pycurl
 from plexapi.exceptions import NotFound
 from plexapi.library import ShowSection
+from plexapi.media import MediaPart
 from plexapi.myplex import MyPlexAccount
 from plexapi.playlist import Playlist
 from plexapi.video import Video
@@ -16,13 +17,14 @@ from tqdm import tqdm
 
 
 class PlexDownloader:
-    def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool):
+    def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool, refresh_assets: bool):
         self.logger = logging.getLogger('download')
         self.target = target
         self.bw_limit = bw_limit
         self.show_progress = show_progress
         self.assets = assets
         self.force = force
+        self.refresh_assets = refresh_assets
         self.curl = pycurl.Curl()
         self.progressbar = tqdm(unit='B', unit_scale=True, unit_divisor=1024)
         self.progressbar.clear()
@@ -44,10 +46,7 @@ class PlexDownloader:
                           disable=not self.show_progress):
             self.logger.debug(f'Video {video.title} from playlist {playlist.title}')
             video.reload()
-            self.logger.debug(f'viewcount: {video.viewCount}')
-            if video.viewCount > 0 and not self.force:
-                self.logger.info(f'{video.title} already seen')
-                continue
+            self.logger.debug(f'view count: {video.viewCount}')
             self.video_episodes(video=video)
             if remove:
                 logging.info(f'deleting {video.title} from playlist')
@@ -61,17 +60,10 @@ class PlexDownloader:
                 episode.reload()
                 self.logger.debug(f'Found: {episode.season().title} Episode {episode.index} {episode.title}')
                 self.logger.debug(f'view count: {episode.viewCount}')
-                if episode.viewCount > 0 and not self.force:
-                    self.logger.info(f'{episode.season().title} Episode {episode.index} already seen')
-                    continue
                 self.video_parts(video=episode)
-                self.logger.info(f'marking {episode.title} as watched')
-                episode.markWatched()
         else:
             self.logger.info(f'Found: {video.title}')
             self.video_parts(video=video)
-            self.logger.info(f'marking {video.title} as watched')
-            video.markWatched()
 
     def curl_progress(self, download_total: int, downloaded: int, upload_total: int, uploaded: int):
         self.progressbar.total = download_total
@@ -87,21 +79,29 @@ class PlexDownloader:
             filename = os.path.basename(os.path.abspath(self.target + part.file))
             url = video.url(part.key)
             self.logger.info(f'downloading {url} to {path + "/." + filename}')
-            self.download(url=url, path=path, filename=filename, title=video.title)
-            if self.assets:
-                self.download_subtitles(video=part, path=path, filename=filename)
+            if video.viewCount == 0 or self.force:
+                self.download(url=url, path=path, filename=filename, title=video.title)
+                if self.assets:
+                    self.download_subtitles(video=video, part=part, path=path, filename=filename)
+                    self.download_pics(video=video, path=path, filename=filename)
+                self.logger.info(f'marking {video.title} as watched')
+                video.markWatched()
+            elif self.refresh_assets:
+                self.download_subtitles(video=video, part=part, path=path, filename=filename)
                 self.download_pics(video=video, path=path, filename=filename)
+            else:
+                self.logger.info(f'{video.title} already seen')
 
-    def download_subtitles(self, video: Video, path: str, filename: str):
-        self.logger.debug(f'downloading subtitles for {video}')
-        for sub in video.subtitleStreams():
+    def download_subtitles(self, video: Video, part: MediaPart, path: str, filename: str):
+        self.logger.debug(f'downloading subtitles for {part}')
+        for sub in part.subtitleStreams():
             self.logger.debug(f'Found subtitle {sub}')
             if sub.key is None:
                 self.logger.debug('Subtitle is embedded, skipping')
                 continue
-            filename = f'{".".join(filename.split(".")[0:-1])}.{sub.languageCode}.{sub.codec}'
+            sub_filename = f'{".".join(filename.split(".")[0:-1])}.{sub.languageCode}.{sub.codec}'
             url = video.url(sub.key)
-            self.download(url=url, path=path, filename=filename, title=f'{sub.languageCode} {sub.codec}', resume=False)
+            self.download(url=url, path=path, filename=sub_filename, title=f'{sub.languageCode} {sub.codec}', resume=False)
 
     def download_pics(self, video: Video, path: str, filename: str):
         self.logger.debug(f'downloading pics for {video}')
@@ -145,7 +145,7 @@ class PlexDownloader:
 if __name__ == "__main__":
     logger = logging.getLogger('download')
     log_handler = logging.StreamHandler()
-    log_handler.setFormatter(logging.Formatter('%(asctime)s %(filename)-18s %(levelname)-8s: %(message)s'))
+    log_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(filename)s:%(lineno)d:%(funcName)-18s %(message)s'))
     logger.addHandler(log_handler)
 
     authentication = netrc.netrc().authenticators('plex')
@@ -168,9 +168,10 @@ if __name__ == "__main__":
     parser.add_argument("--progress", help="show download progress", action="store_true")
     parser.add_argument("--force", help="force download, even if already seen", action="store_true")
     parser.add_argument("--assets", help="also download other assets (subtitles, cover and fanart)", action="store_true")
-    group2 = parser.add_argument_group()
-    group2.add_argument("--playlist", help="playlist to fetch")
-    group2.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
+    parser.add_argument("--refresh-assets", help="redownload all assets", action="store_true")
+    playlist_group = parser.add_argument_group()
+    playlist_group.add_argument("--playlist", help="playlist to fetch")
+    playlist_group.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
     args = parser.parse_args()
 
     if not (args.playlist or args.section) or (args.playlist and args.section):
@@ -189,7 +190,8 @@ if __name__ == "__main__":
 
     logger.info(f'connecting to {args.server}')
     plex = user.resource(args.server).connect()
-    pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force)
+    pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force,
+                        refresh_assets=args.refresh_assets)
     if args.section:
         logger.info(f'selecting section {args.section}')
         try:
