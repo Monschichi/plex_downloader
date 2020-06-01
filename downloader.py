@@ -98,16 +98,16 @@ class PlexDownloader:
                 continue
             filename = f'{".".join(filename.split(".")[0:-1])}.{sub.languageCode}.{sub.codec}'
             url = video._server.url(f'{sub.key}?download=1&X-Plex-Token={video._server._token}')
-            self.download(url=url, path=path, filename=filename, title=f'{sub.languageCode} {sub.codec}')
+            self.download(url=url, path=path, filename=filename, title=f'{sub.languageCode} {sub.codec}', resume=False)
 
     def download_pics(self, video, path, filename):
         self.logger.debug(f'downloading pics for {video}')
         artfilename = f'{".".join(filename.split(".")[0:-1])}-{"fanart"}.{"jpg"}'
-        self.download(url=video.artUrl, path=path, filename=artfilename, title='thumbnail')
+        self.download(url=video.artUrl, path=path, filename=artfilename, title='thumbnail', resume=False)
         thumbfilename = f'{".".join(filename.split(".")[0:-1])}.{"jpg"}'
-        self.download(url=video.thumbUrl, path=path, filename=thumbfilename, title='art')
+        self.download(url=video.thumbUrl, path=path, filename=thumbfilename, title='art', resume=False)
 
-    def download(self, url, path, filename, title):
+    def download(self, url: str, path: str, filename: str, title: str, resume: bool = True):
         self.logger.debug(f'downloading {url} {path} {filename} {title}')
         try:
             os.makedirs(path)
@@ -119,7 +119,7 @@ class PlexDownloader:
         self.curl.setopt(self.curl.URL, url)
         if self.bw_limit:
             self.curl.setopt(self.curl.MAX_RECV_SPEED_LARGE, self.bw_limit)
-        if os.path.exists(path + "/." + filename):
+        if os.path.exists(path + "/." + filename) and resume:
             file_id = open(path + "/." + filename, "ab")
             self.curl.setopt(self.curl.RESUME_FROM, os.path.getsize(path + "/." + filename))
         else:
