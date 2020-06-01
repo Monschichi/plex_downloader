@@ -85,7 +85,7 @@ class PlexDownloader:
             self.logger.info(f'mkdir: {os.path.dirname(os.path.abspath(self.target + part.file))}')
             path = os.path.dirname(os.path.abspath(self.target + part.file))
             filename = os.path.basename(os.path.abspath(self.target + part.file))
-            url = video._server.url(f'{part.key}?download=1&X-Plex-Token={video._server._token}')
+            url = video.url(part.key)
             self.logger.info(f'downloading {url} to {path + "/." + filename}')
             self.download(url=url, path=path, filename=filename, title=video.title)
             if self.assets:
@@ -100,7 +100,7 @@ class PlexDownloader:
                 self.logger.debug('Subtitle is embedded, skipping')
                 continue
             filename = f'{".".join(filename.split(".")[0:-1])}.{sub.languageCode}.{sub.codec}'
-            url = video._server.url(f'{sub.key}?download=1&X-Plex-Token={video._server._token}')
+            url = video.url(sub.key)
             self.download(url=url, path=path, filename=filename, title=f'{sub.languageCode} {sub.codec}', resume=False)
 
     def download_pics(self, video: Video, path: str, filename: str):
@@ -193,16 +193,16 @@ if __name__ == "__main__":
     if args.section:
         logger.info(f'selecting section {args.section}')
         try:
-            section = plex.library.section(args.section)
+            se = plex.library.section(args.section)
         except NotFound:
             logger.error(f'section {args.section} not found')
             sys.exit(os.EX_DATAERR)
-        pd.process_section(section=section, name=args.name)
+        pd.process_section(section=se, name=args.name)
     elif args.playlist:
         logger.info(f'selecting playlist {args.playlist}')
         try:
-            playlist = plex.playlist(args.playlist)
+            pl = plex.playlist(args.playlist)
         except NotFound:
             logger.error(f'playlist {args.playlist} not found')
             sys.exit(os.EX_DATAERR)
-        pd.process_playlist(playlist=playlist, remove=args.playlist_remove)
+        pd.process_playlist(playlist=pl, remove=args.playlist_remove)
