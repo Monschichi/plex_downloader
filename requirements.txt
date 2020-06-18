@@ -3,7 +3,7 @@ chardet==3.0.4
 idna==2.9
 PlexAPI==4.0.0
 pycurl==7.43.0.5
-requests==2.23.0
+requests==2.24.0
 six==1.15.0
 tqdm==4.46.1
 urllib3==1.25.9
