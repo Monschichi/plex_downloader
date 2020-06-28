@@ -1,6 +1,6 @@
 certifi==2020.6.20
 chardet==3.0.4
-idna==2.9
+idna==2.10
 PlexAPI==4.0.0
 pycurl==7.43.0.5
 requests==2.24.0
