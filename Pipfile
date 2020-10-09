@@ -1,0 +1,4 @@
+[packages]
+pycurl = ">=7.0.0.0"
+PlexAPI = ">=4.0.0"
+tqdm = ">=4.49.0"
