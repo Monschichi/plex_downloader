@@ -77,7 +77,7 @@ class PlexDownloader:
             self.logger.info(f'mkdir: {os.path.dirname(os.path.abspath(self.target + part.file))}')
             path = os.path.dirname(os.path.abspath(self.target + part.file))
             filename = os.path.basename(os.path.abspath(self.target + part.file))
-            url = video.url(part.key)
+            url = f'{video.url(part.key)}&download=1'
             self.logger.info(f'downloading {url} to {path + "/." + filename}')
             if video.viewCount == 0 or self.force:
                 self.download(url=url, path=path, filename=filename, title=video.title)
