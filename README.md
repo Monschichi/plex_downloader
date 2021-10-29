@@ -11,8 +11,7 @@ machine plex
 
 Install needed python modules:
 ```commandline
-$ pip3 install --user pipenv
-$ pipenv sync
+$ pip3 install --user -r requirements.txt
 ```
 
-see `pipenv run downloader.py --help` for usage.
+see `./downloader.py --help` for usage.
