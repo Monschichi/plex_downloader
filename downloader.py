@@ -17,7 +17,8 @@ from tqdm import tqdm
 
 
 class PlexDownloader:
-    def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool, refresh_assets: bool):
+    def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool, refresh_assets: bool,
+                 no_transcoding:bool):
         self.logger = logging.getLogger('download')
         self.target = target
         self.bw_limit = bw_limit
@@ -25,6 +26,7 @@ class PlexDownloader:
         self.assets = assets
         self.force = force
         self.refresh_assets = refresh_assets
+        self.no_transcoding = no_transcoding
         self.curl = pycurl.Curl()
         self.progressbar = tqdm(unit='B', unit_scale=True, unit_divisor=1024)
         self.progressbar.clear()
@@ -80,7 +82,17 @@ class PlexDownloader:
             url = f'{video.url(part.key)}&download=1'
             self.logger.info(f'downloading {url} to {path + "/." + filename}')
             if video.viewCount == 0 or self.force:
-                self.download(url=url, path=path, filename=filename, title=video.title)
+                status = self.download(url=url, path=path, filename=filename, title=video.title)
+                if status in [200, 416]:
+                    pass
+                elif status in [403, 33] and not self.no_transcoding:
+                    # try downloading via transcode
+                    self.logger.warning('trying download via transcoding.')
+                    status = self.download(url=video.getStreamURL(), path=path, filename=filename, title=video.title, resume=False)
+                    if status not in [200, 416]:
+                        continue
+                else:
+                    continue
                 if self.assets:
                     self.download_subtitles(video=video, part=part, path=path, filename=filename)
                     self.download_pics(video=video, path=path, filename=filename)
@@ -110,8 +122,8 @@ class PlexDownloader:
         thumbfilename = f'{".".join(filename.split(".")[0:-1])}.{"jpg"}'
         self.download(url=video.thumbUrl, path=path, filename=thumbfilename, title='art', resume=False)
 
-    def download(self, url: str, path: str, filename: str, title: str, resume: bool = True):
-        self.logger.debug(f'downloading {url} {path} {filename} {title}')
+    def download(self, url: str, path: str, filename: str, title: str, resume: bool = True) -> int:
+        self.logger.debug(f'downloading {url} {path} {filename} {title} {resume}')
         try:
             os.makedirs(path)
         except FileExistsError:
@@ -126,7 +138,12 @@ class PlexDownloader:
             file_id = open(path + "/." + filename, "ab")
             self.curl.setopt(self.curl.RESUME_FROM, os.path.getsize(path + "/." + filename))
         else:
+            try:
+                os.unlink(path + "/." + filename)
+            except FileNotFoundError:
+                pass
             file_id = open(path + "/." + filename, "wb")
+            self.curl.setopt(self.curl)
 
         self.curl.setopt(self.curl.WRITEDATA, file_id)
         if self.show_progress:
@@ -136,10 +153,25 @@ class PlexDownloader:
             self.curl.setopt(self.curl.XFERINFOFUNCTION, self.curl_progress)
         else:
             self.curl.setopt(self.curl.NOPROGRESS, 1)
-        self.curl.perform()
+        try:
+            self.curl.perform()
+        except pycurl.error as e:
+            self.logger.warning(e.args[1])
+            return e.args[0]
+        response_code = self.curl.getinfo(self.curl.RESPONSE_CODE)
         self.progressbar.clear()
-        self.logger.info(f'renaming {path + "/." + filename} to {path + "/" + filename}')
-        os.rename(path + "/." + filename, path + "/" + filename)
+        self.logger.debug(f'response code: {response_code}')
+        if response_code in [200, 416]:
+            self.logger.info(f'renaming {path + "/." + filename} to {path + "/" + filename}')
+            os.rename(path + "/." + filename, path + "/" + filename)
+        elif response_code == 403:
+            self.logger.warning(f'Error downloading "{title}" got response code: {response_code}')
+            self.logger.warning(f'Hint: Server needs Plex Pass and need to have downloads allowed.')
+            os.unlink(path + "/." + filename)
+        else:
+            self.logger.error(f'Error downloading "{title}" got response code: {response_code}')
+            os.unlink(path + "/." + filename)
+        return response_code
 
 
 if __name__ == "__main__":
@@ -169,6 +201,7 @@ if __name__ == "__main__":
     parser.add_argument("--force", help="force download, even if already seen", action="store_true")
     parser.add_argument("--assets", help="also download other assets (subtitles, cover and fanart)", action="store_true")
     parser.add_argument("--refresh-assets", help="redownload all assets", action="store_true")
+    parser.add_argument("--no-transcoding", help="deny transcoding if direct download fail", action="store_true")
     playlist_group = parser.add_argument_group()
     playlist_group.add_argument("--playlist", help="playlist to fetch")
     playlist_group.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
@@ -191,7 +224,7 @@ if __name__ == "__main__":
     logger.info(f'connecting to {args.server}')
     plex = user.resource(args.server).connect()
     pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force,
-                        refresh_assets=args.refresh_assets)
+                        refresh_assets=args.refresh_assets, no_transcoding=args.no_transcoding)
     if args.section:
         logger.info(f'selecting section {args.section}')
         try:
