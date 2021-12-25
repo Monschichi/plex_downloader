@@ -143,7 +143,6 @@ class PlexDownloader:
             except FileNotFoundError:
                 pass
             file_id = open(path + "/." + filename, "wb")
-            self.curl.setopt(self.curl)
 
         self.curl.setopt(self.curl.WRITEDATA, file_id)
         if self.show_progress:
