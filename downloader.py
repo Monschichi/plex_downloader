@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 class PlexDownloader:
     def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool, refresh_assets: bool,
-                 no_transcoding:bool):
+                 no_transcoding: bool, timeout: int):
         self.logger = logging.getLogger('download')
         self.target = target
         self.bw_limit = bw_limit
@@ -27,6 +27,7 @@ class PlexDownloader:
         self.force = force
         self.refresh_assets = refresh_assets
         self.no_transcoding = no_transcoding
+        self.timeout = timeout
         self.curl = pycurl.Curl()
         self.progressbar = tqdm(unit='B', unit_scale=True, unit_divisor=1024)
         self.progressbar.clear()
@@ -145,6 +146,8 @@ class PlexDownloader:
             file_id = open(path + "/." + filename, "wb")
 
         self.curl.setopt(self.curl.WRITEDATA, file_id)
+        self.logger.debug(f'timeout: {self.timeout}')
+        self.curl.setopt(self.curl.TIMEOUT, self.timeout)
         if self.show_progress:
             self.progressbar.set_description(desc=f'Downloading {title}')
             self.progressbar.reset()
@@ -201,6 +204,7 @@ if __name__ == "__main__":
     parser.add_argument("--assets", help="also download other assets (subtitles, cover and fanart)", action="store_true")
     parser.add_argument("--refresh-assets", help="redownload all assets", action="store_true")
     parser.add_argument("--no-transcoding", help="deny transcoding if direct download fail", action="store_true")
+    parser.add_argument("--timeout", help="timeout in seconds", type=int, default=300)
     playlist_group = parser.add_argument_group()
     playlist_group.add_argument("--playlist", help="playlist to fetch")
     playlist_group.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
@@ -223,7 +227,7 @@ if __name__ == "__main__":
     logger.info(f'connecting to {args.server}')
     plex = user.resource(args.server).connect()
     pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force,
-                        refresh_assets=args.refresh_assets, no_transcoding=args.no_transcoding)
+                        refresh_assets=args.refresh_assets, no_transcoding=args.no_transcoding, timeout=args.timeout)
     if args.section:
         logger.info(f'selecting section {args.section}')
         try:
