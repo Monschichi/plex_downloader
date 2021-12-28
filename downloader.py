@@ -86,7 +86,7 @@ class PlexDownloader:
                 status = self.download(url=url, path=path, filename=filename, title=video.title)
                 if status in [200, 416]:
                     pass
-                elif status in [403, 33] and not self.no_transcoding:
+                elif status in [403] and not self.no_transcoding:
                     # try downloading via transcode
                     self.logger.warning('trying download via transcoding.')
                     status = self.download(url=video.getStreamURL(), path=path, filename=filename, title=video.title, resume=False)
@@ -143,8 +143,8 @@ class PlexDownloader:
                 os.unlink(path + "/." + filename)
             except FileNotFoundError:
                 pass
-            file_id = open(path + "/." + filename, "wb")
-
+            file_id = open(path + "/." + filename, "xb")
+            self.curl.setopt(self.curl.RESUME_FROM, 0)
         self.curl.setopt(self.curl.WRITEDATA, file_id)
         self.logger.debug(f'timeout: {self.timeout}')
         self.curl.setopt(self.curl.TIMEOUT, self.timeout)
@@ -158,7 +158,10 @@ class PlexDownloader:
         try:
             self.curl.perform()
         except pycurl.error as e:
-            self.logger.warning(e.args[1])
+            self.logger.warning(f"{e.args[0]} {e.args[1]}")
+            if e.args[0] == 33 and resume is True:
+                self.logger.warning("server doesn't support resume, therefore retrying without.")
+                return self.download(url=url, path=path, filename=filename, title=title, resume=False)
             return e.args[0]
         response_code = self.curl.getinfo(self.curl.RESPONSE_CODE)
         self.progressbar.clear()
