@@ -179,6 +179,17 @@ class PlexDownloader:
         return response_code
 
 
+class MyFormatter(logging.Formatter):
+    def __init__(self, token: str):
+        super().__init__(fmt='%(asctime)s %(levelname)-8s %(filename)s:%(lineno)d:%(funcName)-18s %(message)s')
+        self.token = token
+
+    def format(self, record):
+        if self.token in record.msg:
+            record.msg = record.msg.replace(self.token, "XXX")
+        return super().format(record)
+
+
 if __name__ == "__main__":
     logger = logging.getLogger('download')
     log_handler = logging.StreamHandler()
@@ -229,6 +240,7 @@ if __name__ == "__main__":
 
     logger.info(f'connecting to {args.server}')
     plex = user.resource(args.server).connect()
+    logger.handlers[0].setFormatter(MyFormatter(token=plex._token))
     pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force,
                         refresh_assets=args.refresh_assets, no_transcoding=args.no_transcoding, timeout=args.timeout)
     if args.section:
