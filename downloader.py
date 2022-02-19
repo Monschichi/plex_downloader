@@ -48,12 +48,11 @@ class PlexDownloader:
         for video in tqdm(playlist.items(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
                           disable=not self.show_progress):
             self.logger.debug(f'Video {video.title} from playlist {playlist.title}')
-            video.reload()
             self.logger.debug(f'view count: {video.viewCount}')
             self.video_episodes(video=video)
             if remove:
-                logging.info(f'deleting {video.title} from playlist')
-                playlist.removeItem(video)
+                self.logger.info(f'deleting {video.title} from playlist')
+                playlist.removeItems([video])
 
     def video_episodes(self, video: Video):
         if video.type == 'show':
