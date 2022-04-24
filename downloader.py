@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import argparse
 import logging
 import netrc
@@ -17,8 +16,10 @@ from tqdm import tqdm
 
 
 class PlexDownloader:
-    def __init__(self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool, refresh_assets: bool,
-                 no_transcoding: bool, timeout: int):
+    def __init__(
+        self, target: str, bw_limit: int, show_progress: bool, assets: bool, force: bool, refresh_assets: bool,
+        no_transcoding: bool, timeout: int,
+    ):
         self.logger = logging.getLogger('download')
         self.target = target
         self.bw_limit = bw_limit
@@ -45,8 +46,10 @@ class PlexDownloader:
 
     def process_playlist(self, playlist: Playlist, remove=False):
         self.logger.info(f'processing playlist {playlist}')
-        for video in tqdm(playlist.items(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
-                          disable=not self.show_progress):
+        for video in tqdm(
+            playlist.items(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
+            disable=not self.show_progress,
+        ):
             self.logger.debug(f'Video {video.title} from playlist {playlist.title}')
             self.logger.debug(f'view count: {video.viewCount}')
             self.video_episodes(video=video)
@@ -57,8 +60,10 @@ class PlexDownloader:
     def video_episodes(self, video: Video):
         if video.type == 'show':
             self.logger.debug(f'Found Show: {video.title}')
-            for episode in tqdm(video.episodes(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
-                                disable=not self.show_progress):
+            for episode in tqdm(
+                video.episodes(), desc='video count', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}',
+                disable=not self.show_progress,
+            ):
                 episode.reload()
                 self.logger.debug(f'Found: {episode.season().title} Episode {episode.index} {episode.title}')
                 self.logger.debug(f'view count: {episode.viewCount}')
@@ -134,15 +139,15 @@ class PlexDownloader:
         self.curl.setopt(self.curl.URL, url)
         if self.bw_limit:
             self.curl.setopt(self.curl.MAX_RECV_SPEED_LARGE, self.bw_limit)
-        if os.path.exists(path + "/." + filename) and resume:
-            file_id = open(path + "/." + filename, "ab")
-            self.curl.setopt(self.curl.RESUME_FROM, os.path.getsize(path + "/." + filename))
+        if os.path.exists(path + '/.' + filename) and resume:
+            file_id = open(path + '/.' + filename, 'ab')
+            self.curl.setopt(self.curl.RESUME_FROM, os.path.getsize(path + '/.' + filename))
         else:
             try:
-                os.unlink(path + "/." + filename)
+                os.unlink(path + '/.' + filename)
             except FileNotFoundError:
                 pass
-            file_id = open(path + "/." + filename, "xb")
+            file_id = open(path + '/.' + filename, 'xb')
             self.curl.setopt(self.curl.RESUME_FROM, 0)
         self.curl.setopt(self.curl.WRITEDATA, file_id)
         self.logger.debug(f'timeout: {self.timeout}')
@@ -157,7 +162,7 @@ class PlexDownloader:
         try:
             self.curl.perform()
         except pycurl.error as e:
-            self.logger.warning(f"{e.args[0]} {e.args[1]}")
+            self.logger.warning(f'{e.args[0]} {e.args[1]}')
             if e.args[0] == 33 and resume is True:
                 self.logger.warning("server doesn't support resume, therefore retrying without.")
                 return self.download(url=url, path=path, filename=filename, title=title, resume=False)
@@ -167,14 +172,14 @@ class PlexDownloader:
         self.logger.debug(f'response code: {response_code}')
         if response_code in [200, 416]:
             self.logger.info(f'renaming {path + "/." + filename} to {path + "/" + filename}')
-            os.rename(path + "/." + filename, path + "/" + filename)
+            os.rename(path + '/.' + filename, path + '/' + filename)
         elif response_code == 403:
             self.logger.warning(f'Error downloading "{title}" got response code: {response_code}')
             self.logger.warning(f'Hint: Server needs Plex Pass and need to have downloads allowed.')
-            os.unlink(path + "/." + filename)
+            os.unlink(path + '/.' + filename)
         else:
             self.logger.error(f'Error downloading "{title}" got response code: {response_code}')
-            os.unlink(path + "/." + filename)
+            os.unlink(path + '/.' + filename)
         return response_code
 
 
@@ -185,11 +190,11 @@ class MyFormatter(logging.Formatter):
 
     def format(self, record):
         if self.token in record.msg:
-            record.msg = record.msg.replace(self.token, "XXX")
+            record.msg = record.msg.replace(self.token, 'XXX')
         return super().format(record)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     logger = logging.getLogger('download')
     log_handler = logging.StreamHandler()
     log_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(filename)s:%(lineno)d:%(funcName)-18s %(message)s'))
@@ -203,24 +208,26 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     group1 = parser.add_mutually_exclusive_group()
-    group1.add_argument("-d", "--debug", action="store_true")
-    group1.add_argument("-v", "--verbose", action="store_true")
-    group1.add_argument("-q", "--quiet", action="store_true")
-    parser.add_argument("--server", help="Plex server name to fetch files from", required=True,
-                        choices=[x.name for x in user.resources() if x.provides == 'server'])
-    parser.add_argument("--target", help="destination folder", required=True)
-    parser.add_argument("--section", help="section to fetch")
-    parser.add_argument("--name", help="movie or series to fetch")
-    parser.add_argument("--bwlimit", help="limit bandwidth in bytes/s", type=int)
-    parser.add_argument("--progress", help="show download progress", action="store_true")
-    parser.add_argument("--force", help="force download, even if already seen", action="store_true")
-    parser.add_argument("--assets", help="also download other assets (subtitles, cover and fanart)", action="store_true")
-    parser.add_argument("--refresh-assets", help="redownload all assets", action="store_true")
-    parser.add_argument("--no-transcoding", help="deny transcoding if direct download fail", action="store_true")
-    parser.add_argument("--timeout", help="timeout in seconds", type=int, default=300)
+    group1.add_argument('-d', '--debug', action='store_true')
+    group1.add_argument('-v', '--verbose', action='store_true')
+    group1.add_argument('-q', '--quiet', action='store_true')
+    parser.add_argument(
+        '--server', help='Plex server name to fetch files from', required=True,
+        choices=[x.name for x in user.resources() if x.provides == 'server'],
+    )
+    parser.add_argument('--target', help='destination folder', required=True)
+    parser.add_argument('--section', help='section to fetch')
+    parser.add_argument('--name', help='movie or series to fetch')
+    parser.add_argument('--bwlimit', help='limit bandwidth in bytes/s', type=int)
+    parser.add_argument('--progress', help='show download progress', action='store_true')
+    parser.add_argument('--force', help='force download, even if already seen', action='store_true')
+    parser.add_argument('--assets', help='also download other assets (subtitles, cover and fanart)', action='store_true')
+    parser.add_argument('--refresh-assets', help='redownload all assets', action='store_true')
+    parser.add_argument('--no-transcoding', help='deny transcoding if direct download fail', action='store_true')
+    parser.add_argument('--timeout', help='timeout in seconds', type=int, default=300)
     playlist_group = parser.add_argument_group()
-    playlist_group.add_argument("--playlist", help="playlist to fetch")
-    playlist_group.add_argument("--playlist-remove", action="store_true", help="cleanup playlist after downloading")
+    playlist_group.add_argument('--playlist', help='playlist to fetch')
+    playlist_group.add_argument('--playlist-remove', action='store_true', help='cleanup playlist after downloading')
     args = parser.parse_args()
 
     if not (args.playlist or args.section) or (args.playlist and args.section):
@@ -240,8 +247,10 @@ if __name__ == "__main__":
     logger.info(f'connecting to {args.server}')
     plex = user.resource(args.server).connect()
     logger.handlers[0].setFormatter(MyFormatter(token=plex._token))
-    pd = PlexDownloader(target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force,
-                        refresh_assets=args.refresh_assets, no_transcoding=args.no_transcoding, timeout=args.timeout)
+    pd = PlexDownloader(
+        target=args.target, bw_limit=args.bwlimit, show_progress=args.progress, assets=args.assets, force=args.force,
+        refresh_assets=args.refresh_assets, no_transcoding=args.no_transcoding, timeout=args.timeout,
+    )
     if args.section:
         logger.info(f'selecting section {args.section}')
         try:

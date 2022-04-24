@@ -1,0 +1,38 @@
+---
+default_language_version:
+  python: python3.10
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.2.0
+    hooks:
+      - id: trailing-whitespace
+      - id: check-ast
+      - id: check-shebang-scripts-are-executable
+      - id: check-executables-have-shebangs
+      - id: check-yaml
+      - id: debug-statements
+      - id: double-quote-string-fixer
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: requirements-txt-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/asottile/add-trailing-comma
+    rev: v2.2.3
+    hooks:
+      - id: add-trailing-comma
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v2.32.0
+    hooks:
+      - id: pyupgrade
+  - repo: https://github.com/asottile/reorder_python_imports
+    rev: v3.0.1
+    hooks:
+      - id: reorder-python-imports
+  - repo: https://github.com/asottile/yesqa
+    rev: v1.3.0
+    hooks:
+      - id: yesqa
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.2.4
+    hooks:
+      - id: python-safety-dependencies-check
