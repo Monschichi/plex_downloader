@@ -1,3 +1,6 @@
+# This project is no longer maintained
+If you want to continue maintaining it please contact me.
+
 # Plex Downloader
 This tool will download specified unseen movies/series from a given [Plex](https://plex.tv/) server. Marks downloaded files as seen to avoid redownload.
 Now with resume, progressbar and Bandwidth limit.
